@@ -1,10 +1,11 @@
 package main
 
-import ( "piscine"
-	
+import (
+	"piscine"
 )
 
 func main() {
-	n := -2
-	piscine.IsNegative(n)
+	piscine.IsNegative(1)
+	piscine.IsNegative(0)
+	piscine.IsNegative(-1)
 }
