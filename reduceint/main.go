@@ -5,9 +5,19 @@ import (
 )
 
 func ReduceInt(a []int, f func(int, int) int) {
-	result := f(a[0], a[1])
-	resultStr := Itoa(result)
-	for _, val := range resultStr {
+	result := a[0]
+	// for i := 1; i < len(a); i++ {
+	// 	result = f(result, a[i])
+	// }
+	for _, val := range a[1:] {
+		result = f(result, val)
+    }
+	PrintStr(Itoa(result))
+	
+}
+
+func PrintStr(s string) {	
+	for _, val := range s {
 		z01.PrintRune(val)
 	}
 	z01.PrintRune('\n')
@@ -45,7 +55,7 @@ func main() {
 	div := func(acc int, cur int) int {
 		return acc / cur
 	}
-	as := []int{500, 2}
+	as := []int{500, 2, 2}
 	ReduceInt(as, mul)
 	ReduceInt(as, sum)
 	ReduceInt(as, div)
