@@ -5,11 +5,58 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 )
 
+// Stack struct holding slice of integers
 type Stack struct {
 	elements []int
+}
+
+// Push method for Stack
+func (s *Stack) Push(value int) {
+	s.elements = append(s.elements, value)
+}
+
+// Pop method for Stack
+func (s *Stack) Pop() int {
+	n := len(s.elements) - 1
+	value := s.elements[n]
+	s.elements = s.elements[:n]
+	return value
+}
+
+// // Swap method for Stack
+// func (s *Stack) Swap() {
+// 	if len(s.elements) >= 2 {
+// 		slices.Swap(s.elements, 0, 1)
+// 	}
+// }
+
+// // Reverse method for Stack using slices.Reverse
+// func (s *Stack) Reverse() {
+// 	slices.Reverse(s.elements)
+// }
+
+// // Rotate (Shift Up) method for Stack
+// func (s *Stack) Rotate() {
+// 	if len(s.elements) > 0 {
+// 		slices.Rotate(s.elements, 1)
+// 	}
+// }
+
+// // Reverse Rotate (Shift Down) method for Stack
+// func (s *Stack) ReverseRotate() {
+// 	if len(s.elements) > 0 {
+// 		slices.Rotate(s.elements, -1)
+// 	}
+// }
+
+// IsSorted method to check if the Stack is sorted
+func (s *Stack) IsSorted() bool {
+	return slices.IsSorted(s.elements)
 }
 
 // Main function to handle input and initiate sorting
@@ -18,23 +65,23 @@ func main() {
 	if len(arg) == 0 {
 		return
 	}
-	args := []string{}
-	for _, i := range arg {
-		args = append(args, string(arg[i]))
-	}
+	input := os.Args[1]
+	fmt.Println(input)
 
-	stackA, err := createStackFromArgs(args)
+	stackA, err := createStackFromArgs(input)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error")
 		os.Exit(1)
 	}
+	fmt.Println("StackA created: ", stackA)
 	stackB := &Stack{}
 
-	if isSorted(&stackA) {
+	if stackA.IsSorted() {
+		fmt.Println("sorted stack")
 		return // Already sorted, no operations needed
 	}
 
-	operations := sortStacks(&stackA, stackB)
+	operations := sortStacks(stackA, stackB)
 
 	for _, op := range operations {
 		fmt.Println(op)
@@ -42,42 +89,48 @@ func main() {
 }
 
 // Function to create stack from command line arguments
-func createStackFromArgs(args []string) (Stack, error) {
-	stack := Stack{elements: []int{}}
-	seen := map[int]bool{}
+func createStackFromArgs(input string) (*Stack, error) {
+	numbers := strings.Fields(input)
+	stack := &Stack{elements: make([]int, 0, len(numbers))}
+	seen := make(map[int]bool)
 
-	for _, arg := range args {
-		num, err := strconv.Atoi(arg)
+	for _, numStr := range numbers {
+		num, err := strconv.Atoi(numStr)
 		if err != nil {
-			return stack, err
+			return nil, fmt.Errorf("invalid number: %v", numStr)
 		}
 		if seen[num] {
-			return stack, fmt.Errorf("duplicate number")
+			return nil, fmt.Errorf("duplicate number: %d", num)
 		}
 		seen[num] = true
 		stack.elements = append(stack.elements, num)
 	}
+	fmt.Printf("Input convertion completed successfully")
+	fmt.Printf("new elements: %v\n", stack.elements)
+	fmt.Printf("new stack: %v\n", stack)
 	return stack, nil
-}
-
-// Function to check if the stack is sorted
-func isSorted(stack *Stack) bool {
-	for i := 1; i < len(stack.elements); i++ {
-		if stack.elements[i-1] > stack.elements[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // Main sorting logic
 func sortStacks(stackA, stackB *Stack) []string {
 	operations := []string{}
 
-	for !isSorted(stackA) || len(stackB.elements) > 0 {
+	if !stackA.IsSorted() || len(stackB.elements) > 0 {
+		// fmt.Println("sorting validation...")
 		if len(stackA.elements) <= 3 {
+			// fmt.Println("Elements less than 3\n\n\n")
 			operations = append(operations, sortSmallStack(stackA)...)
+		} else if slices.Min(stackA.elements) == stackA.elements[len(stackA.elements)-1] {
+			operations = append(operations, "rra", "pb")
+			stackA.elements = stackA.elements[:len(stackA.elements)-1]
+			stackB.elements = append(stackB.elements, stackA.elements[len(stackA.elements)-1])
+			if len(stackA.elements) <= 3 {
+				// sortSmallStack(stackA)
+				operations = append(operations, sortSmallStack(stackA)...)
+			}
+
 		} else {
+			fmt.Println("Elements more than 3")
 			operations = append(operations, greedyMove(stackA, stackB)...)
 		}
 	}
@@ -151,15 +204,19 @@ func sortSmallStack(stackA *Stack) []string {
 		}
 	} else if len(stackA.elements) == 3 {
 		// Sorting logic for exactly 3 elements
-		if stackA.elements[0] > stackA.elements[1] && stackA.elements[1] < stackA.elements[2] && stackA.elements[0] < stackA.elements[2] {
-			operations = append(operations, "sa")
-		} else if stackA.elements[0] > stackA.elements[1] && stackA.elements[1] > stackA.elements[2] {
-			operations = append(operations, "sa", "rra")
-		} else if stackA.elements[0] > stackA.elements[1] && stackA.elements[1] < stackA.elements[2] {
-			operations = append(operations, "ra")
-		} else if stackA.elements[0] < stackA.elements[1] && stackA.elements[1] > stackA.elements[2] && stackA.elements[0] < stackA.elements[2] {
+		minElem := slices.Min(stackA.elements)
+		maxElem := slices.Max(stackA.elements)
+
+		switch {
+		case minElem == stackA.elements[0]:
 			operations = append(operations, "rra", "sa")
-		} else if stackA.elements[0] < stackA.elements[1] && stackA.elements[1] > stackA.elements[2] {
+		case maxElem == stackA.elements[2]:
+			operations = append(operations, "sa")
+		case minElem == stackA.elements[1]:
+			operations = append(operations, "ra")
+		case maxElem == stackA.elements[0]:
+			operations = append(operations, "sa", "rra")
+		case minElem == stackA.elements[2]:
 			operations = append(operations, "rra")
 		}
 	}

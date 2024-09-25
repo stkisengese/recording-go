@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 )
 
@@ -35,7 +36,7 @@ func main() {
 
 	executeOperations(stackA, stackB, operations)
 
-	if isSorted(stackA) && len(stackB.elements) == 0 {
+	if stackA.isSorted() && len(stackB.elements) == 0 {
 		fmt.Println("OK")
 	} else {
 		fmt.Println("KO")
@@ -100,77 +101,73 @@ func executeOperations(stackA, stackB *Stack, operations []string) {
 	for _, op := range operations {
 		switch op {
 		case "sa":
-			swap(stackA)
+			stackA.swap()
 		case "sb":
-			swap(stackB)
+			stackB.swap()
 		case "ss":
-			swap(stackA)
-			swap(stackB)
+			stackA.swap()
+			stackB.swap()
 		case "pa":
 			if len(stackB.elements) > 0 {
-				push(stackA, pop(stackB))
+				stackA.push(stackB.pop())
 			}
 		case "pb":
 			if len(stackA.elements) > 0 {
-				push(stackB, pop(stackA))
+				stackB.push(stackA.pop())
 			}
 		case "ra":
-			rotate(stackA)
+			stackA.rotate()
 		case "rb":
-			rotate(stackB)
+			stackB.rotate()
 		case "rr":
-			rotate(stackA)
-			rotate(stackB)
+			stackA.rotate()
+			stackB.rotate()
 		case "rra":
-			reverseRotate(stackA)
+			stackA.reverseRotate()
 		case "rrb":
-			reverseRotate(stackB)
+			stackB.reverseRotate()
 		case "rrr":
-			reverseRotate(stackA)
-			reverseRotate(stackB)
+			stackA.reverseRotate()
+			stackB.reverseRotate()
 		}
 	}
 }
 
 // Swap the first two elements of the stack
-func swap(stack *Stack) {
-	if len(stack.elements) >= 2 {
-		stack.elements[0], stack.elements[1] = stack.elements[1], stack.elements[0]
+func (s *Stack) swap() {
+	if len(s.elements) >= 2 {
+		s.elements[0], s.elements[1] = s.elements[1], s.elements[0]
 	}
 }
 
 // Push an element onto the stack
-func push(stack *Stack, element int) {
-	stack.elements = append([]int{element}, stack.elements...)
+func (s *Stack) push(element int) {
+	s.elements = append([]int{element}, s.elements...)
 }
 
 // Pop an element from the stack
-func pop(stack *Stack) int {
-	element := stack.elements[0]
-	stack.elements = stack.elements[1:]
+func (s *Stack) pop() int {
+	element := s.elements[0]
+	s.elements = s.elements[1:]
 	return element
 }
 
 // Rotate the stack (shift up)
-func rotate(stack *Stack) {
-	if len(stack.elements) > 0 {
-		stack.elements = append(stack.elements[1:], stack.elements[0])
+func (s *Stack) rotate() {
+	if len(s.elements) > 0 {
+		s.elements = append(s.elements[1:], s.elements[0])
 	}
 }
 
 // Reverse rotate the stack (shift down)
-func reverseRotate(stack *Stack) {
-	if len(stack.elements) > 0 {
-		stack.elements = append([]int{stack.elements[len(stack.elements)-1]}, stack.elements[:len(stack.elements)-1]...)
+func (s *Stack) reverseRotate() {
+	if len(s.elements) > 0 {
+		// stack.elements = append([]int{stack.elements[len(stack.elements)-1]}, stack.elements[:len(stack.elements)-1]...)
+		slices.Reverse(s.elements)
 	}
 }
 
 // Check if the stack is sorted in ascending order
-func isSorted(stack *Stack) bool {
-	for i := 1; i < len(stack.elements); i++ {
-		if stack.elements[i-1] > stack.elements[i] {
-			return false
-		}
-	}
-	return true
+func (s *Stack) isSorted() bool {
+	return slices.IsSorted(s.elements)
 }
