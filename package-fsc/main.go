@@ -3,12 +3,17 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/fs"
+	"math"
 	"os"
 	"os/user"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 type Options struct {
@@ -72,47 +77,63 @@ func parseFlags() (Options, []string) {
 }
 
 func listRecursive(path string, options Options) {
-	filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
+	filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			fmt.Printf("ls: cannot access '%s': %v\n", p, err)
 			return nil
 		}
-		if info.IsDir() {
+		if d.IsDir() {
 			if p != path {
 				fmt.Printf("\n%s:\n", p)
 			}
-			listDir(p, options)
+			files, err := readDir(p, options)
+			if err != nil {
+				fmt.Printf("ls: cannot access '%s': %v\n", p, err)
+				return nil
+			}
+			printFiles(files, options)
 		}
 		return nil
 	})
 }
 
 func listDir(path string, options Options) {
-	dir, err := os.Open(path)
+	files, err := readDir(path, options)
 	if err != nil {
 		fmt.Printf("ls: cannot access '%s': %v\n", path, err)
 		return
 	}
+	printFiles(files, options)
+}
+
+func readDir(path string, options Options) ([]FileInfo, error) {
+	dir, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
 	defer dir.Close()
 
-	entries, err := dir.Readdir(-1)
+	entries, err := dir.ReadDir(-1)
 	if err != nil {
-		fmt.Printf("ls: cannot read directory '%s': %v\n", path, err)
-		return
+		return nil, err
 	}
 
 	files := make([]FileInfo, 0, len(entries))
 	for _, entry := range entries {
-		if !options.ShowHidden && entry.Name()[0] == '.' {
+		if !options.ShowHidden && strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
-		stat := entry.Sys().(*syscall.Stat_t)
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		stat := info.Sys().(*syscall.Stat_t)
 		files = append(files, FileInfo{
-			Name:    entry.Name(),
-			Size:    entry.Size(),
-			Mode:    entry.Mode(),
-			ModTime: entry.ModTime(),
-			IsDir:   entry.IsDir(),
+			Name:    info.Name(),
+			Size:    info.Size(),
+			Mode:    info.Mode(),
+			ModTime: info.ModTime(),
+			IsDir:   info.IsDir(),
 			Nlink:   stat.Nlink,
 			Uid:     stat.Uid,
 			Gid:     stat.Gid,
@@ -120,14 +141,7 @@ func listDir(path string, options Options) {
 	}
 
 	sortFiles(files, options)
-
-	for _, file := range files {
-		printFileInfo(file, options)
-	}
-
-	if !options.LongFormat && !options.OnePerLine {
-		fmt.Println()
-	}
+	return files, nil
 }
 
 func sortFiles(files []FileInfo, options Options) {
@@ -156,60 +170,152 @@ func sortFiles(files []FileInfo, options Options) {
 	}
 }
 
-func printFileInfo(file FileInfo, options Options) {
+func printFiles(files []FileInfo, options Options) {
 	if options.LongFormat {
+		printLongFormat(files, options)
+	} else if options.OnePerLine {
+		for _, file := range files {
+			fmt.Println(formatFileName(file, options))
+		}
+	} else {
+		printColumnar(files, options)
+	}
+}
+
+func printLongFormat(files []FileInfo, options Options) {
+	var totalBlocks int64
+	for _, file := range files {
+		totalBlocks += file.Size / 512
+		if file.Size%512 > 0 {
+			totalBlocks++
+		}
+	}
+	fmt.Printf("total %d\n", totalBlocks)
+
+	maxNlinkWidth := 0
+	maxUserWidth := 0
+	maxGroupWidth := 0
+	maxSizeWidth := 0
+
+	for _, file := range files {
+		nlinkWidth := len(fmt.Sprintf("%d", file.Nlink))
+		if nlinkWidth > maxNlinkWidth {
+			maxNlinkWidth = nlinkWidth
+		}
+
+		usr, _ := user.LookupId(fmt.Sprint(file.Uid))
+		userWidth := len(usr.Username)
+		if userWidth > maxUserWidth {
+			maxUserWidth = userWidth
+		}
+
+		grp, _ := user.LookupGroupId(fmt.Sprint(file.Gid))
+		groupWidth := len(grp.Name)
+		if groupWidth > maxGroupWidth {
+			maxGroupWidth = groupWidth
+		}
+
+		sizeWidth := len(fmt.Sprintf("%d", file.Size))
+		if sizeWidth > maxSizeWidth {
+			maxSizeWidth = sizeWidth
+		}
+	}
+
+	for _, file := range files {
 		usr, _ := user.LookupId(fmt.Sprint(file.Uid))
 		grp, _ := user.LookupGroupId(fmt.Sprint(file.Gid))
 
-		size := fmt.Sprintf("%d", file.Size)
+		size := fmt.Sprintf("%*d", maxSizeWidth, file.Size)
 		if options.HumanReadable {
 			size = humanReadableSize(file.Size)
 		}
 
-		fmt.Printf(
-			"%s %d %s %s %s %s %s",
+		fmt.Printf("%s %*d %-*s %-*s %*s %s %s\n",
 			file.Mode.String(),
-			file.Nlink,
-			usr.Username,
-			grp.Name,
-			size,
-			file.ModTime.Format("Jan 02 15:04"),
-			file.Name,
+			maxNlinkWidth, file.Nlink,
+			maxUserWidth, usr.Username,
+			maxGroupWidth, grp.Name,
+			maxSizeWidth, size,
+			file.ModTime.Format("Jan _2 15:04"),
+			formatFileName(file, options),
 		)
-		if options.Classify {
-			if file.IsDir {
-				fmt.Print("/")
-			} else if file.Mode&0o111 != 0 {
-				fmt.Print("*")
+	}
+}
+
+func printColumnar(files []FileInfo, options Options) {
+	termWidth := getTerminalWidth()
+
+	maxWidth := 0
+	for _, file := range files {
+		width := len(formatFileName(file, options))
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+
+	colWidth := maxWidth + 2
+	numCols := termWidth / colWidth
+	if numCols == 0 {
+		numCols = 1
+	}
+
+	numRows := int(math.Ceil(float64(len(files)) / float64(numCols)))
+
+	for i := 0; i < numRows; i++ {
+		for j := 0; j < numCols; j++ {
+			idx := j*numRows + i
+			if idx < len(files) {
+				fmt.Printf("%-*s", colWidth, formatFileName(files[idx], options))
 			}
 		}
 		fmt.Println()
-	} else {
-		fmt.Print(file.Name)
-		if options.Classify {
-			if file.IsDir {
-				fmt.Print("/")
-			} else if file.Mode&0o111 != 0 {
-				fmt.Print("*")
-			}
-		}
-		if options.OnePerLine {
-			fmt.Println()
-		} else {
-			fmt.Print("  ")
+	}
+}
+
+func formatFileName(file FileInfo, options Options) string {
+	name := file.Name
+	if options.Classify {
+		if file.IsDir {
+			name += "/"
+		} else if file.Mode&0o111 != 0 {
+			name += "*"
 		}
 	}
+	return name
 }
 
 func humanReadableSize(size int64) string {
 	const unit = 1024
 	if size < unit {
-		return fmt.Sprintf("%d B", size)
+		return fmt.Sprintf("%d", size)
 	}
 	div, exp := int64(unit), 0
 	for n := size / unit; n >= unit; n /= unit {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+	return fmt.Sprintf("%.1f%c", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+func getTerminalWidth() int {
+	defaultWidth := 80
+
+	// Try to get the terminal size using TIOCGWINSZ ioctl
+	var size [4]uint16
+	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL,
+		uintptr(syscall.Stdin),
+		uintptr(syscall.TIOCGWINSZ),
+		uintptr(unsafe.Pointer(&size))); err == 0 {
+		return int(size[1])
+	}
+
+	// If ioctl fails, try to get the COLUMNS environment variable
+	if cols := os.Getenv("COLUMNS"); cols != "" {
+		if width, err := strconv.Atoi(cols); err == nil {
+			return width
+		}
+	}
+
+	// If all else fails, return the default width
+	return defaultWidth
 }
