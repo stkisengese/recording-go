@@ -28,31 +28,29 @@ func (s *Stack) Pop() int {
 	return value
 }
 
-// // Swap method for Stack
-// func (s *Stack) Swap() {
-// 	if len(s.elements) >= 2 {
-// 		slices.Swap(s.elements, 0, 1)
-// 	}
-// }
+// Swap method for Stack
+func (s *Stack) Swap() {
+	if len(s.elements) >= 2 {
+		s.elements[0], s.elements[1] = s.elements[1], s.elements[0]
+	}
+}
 
-// // Reverse method for Stack using slices.Reverse
-// func (s *Stack) Reverse() {
-// 	slices.Reverse(s.elements)
-// }
+// Rotate (Shift Up) method for Stack
+func (s *Stack) Rotate() {
+	if len(s.elements) > 0 { first := s.elements[0] 
+		copy(s.elements, s.elements[1:]) 
+		s.elements[len(s.elements)-1] = first 
+	}
+}
 
-// // Rotate (Shift Up) method for Stack
-// func (s *Stack) Rotate() {
-// 	if len(s.elements) > 0 {
-// 		slices.Rotate(s.elements, 1)
-// 	}
-// }
-
-// // Reverse Rotate (Shift Down) method for Stack
-// func (s *Stack) ReverseRotate() {
-// 	if len(s.elements) > 0 {
-// 		slices.Rotate(s.elements, -1)
-// 	}
-// }
+// Reverse Rotate (Shift Down) method for Stack
+func (s *Stack) ReverseRotate() {
+	if len(s.elements) > 0 {
+		last := s.elements[len(s.elements)-1] 
+		copy(s.elements[1:], s.elements) 
+		s.elements[0] = last 
+	}
+}
 
 // IsSorted method to check if the Stack is sorted
 func (s *Stack) IsSorted() bool {
@@ -136,8 +134,8 @@ func sortStacks(stackA, stackB *Stack) []string {
 	}
 
 	operations = append(operations, mergeBack(stackA, stackB)...)
-	// return optimizeOperations(operations)
-	return operations
+	return optimizeOperations(operations)
+	//return operations
 }
 
 // Function to handle greedy move based on the calculated greediness
@@ -282,8 +280,21 @@ func min(a, b int) int {
 	return b
 }
 
-// // Optimize operations to remove redundancies
-// func optimizeOperations(operations []string) []string {
-// 	// Placeholder: Just returning the original operations
-// 	return operations
-// }
+// Optimize operations to remove redundancies
+func optimizeOperations(operations []string) []string {
+	optimized := []string{}
+	// Simple optimization: remove consecutive redundant operations
+	for i := 0; i < len(operations); i++ {
+		if i < len(operations)-1 && isRedundant(operations[i], operations[i+1]) {
+			i++ // Skip redundant operation
+		} else {
+			optimized = append(optimized, operations[i])
+		}
+	}
+	return optimized
+}
+
+// Function to check if two operations are redundant
+func isRedundant(op1, op2 string) bool {
+	return (op1 == "ra" && op2 == "rra") || (op1 == "rra" && op2 == "ra")
+}
