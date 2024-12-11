@@ -120,8 +120,9 @@ func sortStacks(stackA, stackB *Stack) []string {
 			operations = append(operations, sortSmallStack(stackA)...)
 		} else if slices.Min(stackA.elements) == stackA.elements[len(stackA.elements)-1] {
 			operations = append(operations, "rra", "pb")
-			stackA.elements = stackA.elements[:len(stackA.elements)-1]
-			stackB.elements = append(stackB.elements, stackA.elements[len(stackA.elements)-1])
+			stackB.Push(stackA.Pop())
+			// stackA.elements = stackA.elements[:len(stackA.elements)-1]
+			// stackB.elements = append(stackB.elements, stackA.elements[len(stackA.elements)-1])
 			if len(stackA.elements) <= 3 {
 				// sortSmallStack(stackA)
 				operations = append(operations, sortSmallStack(stackA)...)
@@ -198,6 +199,7 @@ func sortSmallStack(stackA *Stack) []string {
 
 	if len(stackA.elements) == 2 {
 		if stackA.elements[0] > stackA.elements[1] {
+			stackA.Swap()
 			operations = append(operations, "sa")
 		}
 	} else if len(stackA.elements) == 3 {
@@ -207,14 +209,21 @@ func sortSmallStack(stackA *Stack) []string {
 
 		switch {
 		case minElem == stackA.elements[0]:
+			stackA.ReverseRotate()
+			stackA.Swap()
 			operations = append(operations, "rra", "sa")
 		case maxElem == stackA.elements[2]:
+			stackA.Swap()
 			operations = append(operations, "sa")
 		case minElem == stackA.elements[1]:
+			stackA.Rotate()
 			operations = append(operations, "ra")
 		case maxElem == stackA.elements[0]:
+			stackA.Swap()
+			stackA.ReverseRotate()
 			operations = append(operations, "sa", "rra")
 		case minElem == stackA.elements[2]:
+			stackA.ReverseRotate()
 			operations = append(operations, "rra")
 		}
 	}
